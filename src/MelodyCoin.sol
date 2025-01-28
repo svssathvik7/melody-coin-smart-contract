@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 contract MelodyCoin{
-    uint256 public constant RESERVE_PERCENTAGE = 2;
-    uint256 public constant BURN_PERCENTAGE = 2; // reserve gets 0.2%
-    uint256 public constant PERCENTAGE_FACTOR = 1000; // burn percentage is 0.2%
-    uint256 public constant FAUCET_ONE_TIME_DELIVERY_AMOUNT = 100000000000000000; // 0.1 in wei
-    uint256 public constant FAUCET_USER_THRESHOLD_BALANCE = 1500000000000000000;
+    uint8 public constant RESERVE_PERCENTAGE = 2;
+    uint8 public constant BURN_PERCENTAGE = 2; // reserve gets 0.2%
+    bool public paused;
+    uint8 public decimals_;
+    uint16 public constant PERCENTAGE_FACTOR = 1000; // burn percentage is 0.2%
+    address public immutable owner_;
+    address public contractAddress;
+    string public name_;
+    string public symbol_;
+    uint256 public constant FAUCET_ONE_TIME_DELIVERY_AMOUNT = 1e17; // 0.1 in wei
+    uint256 public constant FAUCET_USER_THRESHOLD_BALANCE = 15e17;
     uint256 public constant FAUCET_VALIDATION_INTERVAL = 24 hours;
-    string private name_;
-    uint256 public reserveBalance;
-    string private symbol_;
-    uint8 private decimals_;
-    address private immutable owner_;
-    uint256 private totalSupply_;
-    uint256 private maxCap_;
+    uint256 public totalSupply_;
+    uint256 public maxCap_;
+
 
 
     mapping(address=>uint256) private balances;
@@ -24,6 +26,8 @@ contract MelodyCoin{
     event Approval(address indexed owner,address indexed spender,uint256 amount);
     event Burn(address indexed from, address indexed to, uint256 amount);
     event Mint(uint256 amount);
+
+    error TooHighBalance(address account);
 
     modifier onlyOwner(){
         require(msg.sender == owner_,"Only owner can perform this action!");
@@ -41,7 +45,9 @@ contract MelodyCoin{
     }
 
     modifier faucetMaxBalanceCheck(address _account){
-        require(balances[_account] < FAUCET_USER_THRESHOLD_BALANCE,"Too high balance to request faucet!");
+        if(balances[_account] >= FAUCET_USER_THRESHOLD_BALANCE){
+            revert TooHighBalance(_account);
+        }
         _;
     }
 
@@ -51,7 +57,7 @@ contract MelodyCoin{
     }
 
     modifier faucetBalanceCheck(){
-        require(reserveBalance > FAUCET_ONE_TIME_DELIVERY_AMOUNT,"Reserves depleted!");
+        require(balances[contractAddress] > FAUCET_ONE_TIME_DELIVERY_AMOUNT,"Reserves depleted!");
         _;
     }
     /**
@@ -68,14 +74,16 @@ contract MelodyCoin{
     ) {
         require(_initialSupply <= _maxCap,"Initial supply can't exceed Max Cap");
         owner_ = msg.sender;
+        paused = false;
         name_ = _name;
         symbol_ = _symbol;
         decimals_ = _decimals;
-        totalSupply_ = _initialSupply*(10**_decimals);
+        totalSupply_ = _initialSupply;
         maxCap_ = _maxCap;
-        reserveBalance = _initialSupply;
+        contractAddress = address(this);
+        balances[contractAddress] = _initialSupply;
 
-        emit Mint(reserveBalance);
+        emit Mint(balances[contractAddress]);
     }
 
     /**
@@ -122,9 +130,11 @@ contract MelodyCoin{
         * @return Boolean indicating transfer success
     */
     function transfer(address _recipient, uint256 _amount) public noZeroAddrTransfer(_recipient) hasSufficientFunds(balances[msg.sender], _amount) returns (bool) {
-        balances[msg.sender] -= _amount;
         uint256 burnAmount = burn(_amount);
-        balances[_recipient] += (_amount - burnAmount);
+        unchecked{
+            balances[msg.sender] -= _amount;
+            balances[_recipient] += (_amount - burnAmount);
+        }
         emit Transfer(msg.sender, _recipient, _amount-burnAmount);
         emit Burn(msg.sender, _recipient, burnAmount);
         return true;
@@ -183,9 +193,9 @@ contract MelodyCoin{
         require((totalSupply_+_amount) < maxCap_,"Can't mint tokens, as it exceeds the set Max Cap");
         uint256 reserveShare = (_amount * RESERVE_PERCENTAGE)/10; // 20%
         uint256 userShare = _amount - reserveShare;
-        totalSupply_ += _amount;
+        unchecked{totalSupply_ += _amount;
         balances[_account] += userShare;
-        reserveBalance += reserveShare;
+        balances[contractAddress] += reserveShare;}
         emit Transfer(address(0), _account, userShare);
         emit Mint(_amount);
     }
@@ -196,7 +206,7 @@ contract MelodyCoin{
     */
     function burn(uint256 _amount) public returns (uint256) {
         uint256 burnAmount = (_amount * BURN_PERCENTAGE)/(PERCENTAGE_FACTOR);
-        totalSupply_ -= burnAmount;
+        unchecked{totalSupply_ -= burnAmount;}
         return burnAmount;
     }
 
@@ -204,8 +214,8 @@ contract MelodyCoin{
         * @dev Faucet for new users to collect tokens
     */
    function getFaucetAssets() faucetDayIntervalCheck(msg.sender) faucetMaxBalanceCheck(msg.sender) faucetBalanceCheck() external{
-        reserveBalance -= FAUCET_ONE_TIME_DELIVERY_AMOUNT;
-        balances[msg.sender] += FAUCET_ONE_TIME_DELIVERY_AMOUNT;
+        unchecked{balances[contractAddress] -= FAUCET_ONE_TIME_DELIVERY_AMOUNT;
+        balances[msg.sender] += FAUCET_ONE_TIME_DELIVERY_AMOUNT;}
         faucetRecords[msg.sender] = block.timestamp;
         emit Transfer(address(this), msg.sender, FAUCET_ONE_TIME_DELIVERY_AMOUNT);
    }
