@@ -3,7 +3,7 @@ pragma solidity ^0.8.10;
 
 contract MelodyCoin {
     uint8 public constant RESERVE_PERCENTAGE = 2;
-    uint8 public constant BURN_PERCENTAGE = 2; // reserve gets 0.2%
+    uint8 public constant BURN_PERCENTAGE = 2; // reserve gets 0.2% -> 2/1000
     bool public paused;
     uint8 public decimals_;
     uint16 public constant PERCENTAGE_FACTOR = 1000; // burn percentage is 0.2%
@@ -32,23 +32,41 @@ contract MelodyCoin {
     event Paused(uint256 timestamp);
     event UnPaused(uint256 timestamp);
 
+    error InvalidAddress();
+    error NotAnOwner();
+    error InsufficientFunds(uint256 balance, uint256 amount);
     error TooHighBalance(address account);
     error TooFrequentRequests(address account);
     error DepletedFaucetReserves();
     error ContractPaused();
+    error MaxCapExceeded();
+    error InsufficientAllowance();
 
     modifier onlyOwner() {
-        require(msg.sender == owner_, "Only owner can perform this action!");
+        if (msg.sender != owner_) {
+            revert NotAnOwner();
+        }
+        _;
+    }
+
+    modifier isContractPaused() {
+        if (paused) {
+            revert ContractPaused();
+        }
         _;
     }
 
     modifier noZeroAddrTransfer(address _receipent) {
-        require(_receipent != address(0), "Can't transfer to zero address");
+        if (_receipent == address(0)) {
+            revert InvalidAddress();
+        }
         _;
     }
 
     modifier hasSufficientFunds(uint256 _balance, uint256 _amount) {
-        require(_balance >= _amount, "No sufficient funds!");
+        if (_balance < _amount) {
+            revert InsufficientFunds(_balance, _amount);
+        }
         _;
     }
 
@@ -76,6 +94,20 @@ contract MelodyCoin {
         _;
     }
 
+    modifier maxCapCheck(uint256 amount) {
+        if (amount + totalSupply_ > maxCap_) {
+            revert MaxCapExceeded();
+        }
+        _;
+    }
+
+    modifier hasSufficientAllowance(address sender, uint256 amount) {
+        if (allowances[sender][msg.sender] < amount) {
+            revert InsufficientAllowance();
+        }
+        _;
+    }
+
     /**
         @dev constructor to initialize the token
         @param _name is the token name
@@ -90,7 +122,7 @@ contract MelodyCoin {
     ) {
         require(
             _initialSupply <= _maxCap,
-            "Initial supply can't exceed Max Cap"
+            "Initial supply can't exceed max cap"
         );
         owner_ = msg.sender;
         paused = false;
@@ -108,28 +140,28 @@ contract MelodyCoin {
     /**
         @dev Returns the name of the token
     */
-    function name() public view returns (string memory) {
+    function name() external view returns (string memory) {
         return name_;
     }
 
     /**
         @dev Returns the symbol of the token
     */
-    function symbol() public view returns (string memory) {
+    function symbol() external view returns (string memory) {
         return symbol_;
     }
 
     /**
         @dev Returns the number of the decimals
     */
-    function decimals() public view returns (uint8) {
+    function decimals() external view returns (uint8) {
         return decimals_;
     }
 
     /**
         @dev Returns the total supply of the tokens
     */
-    function totalSupply() public view returns (uint256) {
+    function totalSupply() external view returns (uint256) {
         return totalSupply_;
     }
 
@@ -138,7 +170,7 @@ contract MelodyCoin {
      * @param _account Address to check balance for
      * @return Token balance of the account
      */
-    function balanceOf(address _account) public view returns (uint256) {
+    function balanceOf(address _account) external view returns (uint256) {
         return balances[_account];
     }
 
@@ -152,8 +184,9 @@ contract MelodyCoin {
         address _recipient,
         uint256 _amount
     )
-        public
+        external
         noZeroAddrTransfer(_recipient)
+        isContractPaused
         hasSufficientFunds(balances[msg.sender], _amount)
         returns (bool)
     {
@@ -176,7 +209,7 @@ contract MelodyCoin {
     function approve(
         address _spender,
         uint256 _amount
-    ) public noZeroAddrTransfer(_spender) returns (bool) {
+    ) external noZeroAddrTransfer(_spender) isContractPaused returns (bool) {
         allowances[msg.sender][_spender] = _amount;
         emit Approval(msg.sender, _spender, _amount);
         return true;
@@ -191,7 +224,7 @@ contract MelodyCoin {
     function allowance(
         address _owner,
         address _spender
-    ) public view returns (uint256) {
+    ) external view returns (uint256) {
         return allowances[_owner][_spender];
     }
 
@@ -206,11 +239,13 @@ contract MelodyCoin {
         address _sender,
         address _recipient,
         uint256 _amount
-    ) public hasSufficientFunds(balances[_sender], _amount) returns (bool) {
-        require(
-            allowances[_sender][msg.sender] >= _amount,
-            "No sufficient allowance!"
-        );
+    )
+        external
+        hasSufficientFunds(balances[_sender], _amount)
+        isContractPaused
+        hasSufficientAllowance(_sender, _amount)
+        returns (bool)
+    {
         balances[_sender] -= _amount;
         uint256 burnAmount = burn(_amount);
         balances[_recipient] += (_amount - burnAmount);
@@ -225,11 +260,10 @@ contract MelodyCoin {
      * @param _account Address to receive new tokens
      * @param _amount Number of tokens to mint
      */
-    function mint(address _account, uint256 _amount) public onlyOwner {
-        require(
-            (totalSupply_ + _amount) < maxCap_,
-            "Can't mint tokens, as it exceeds the set Max Cap"
-        );
+    function mint(
+        address _account,
+        uint256 _amount
+    ) external onlyOwner isContractPaused maxCapCheck(_amount) {
         uint256 reserveShare = (_amount * RESERVE_PERCENTAGE) / 10; // 20%
         uint256 userShare = _amount - reserveShare;
         unchecked {
@@ -237,7 +271,7 @@ contract MelodyCoin {
             balances[_account] += userShare;
             balances[contractAddress] += reserveShare;
         }
-        emit Transfer(address(0), _account, userShare);
+        emit Transfer(contractAddress, _account, userShare);
         emit Mint(_amount);
     }
 
@@ -245,12 +279,15 @@ contract MelodyCoin {
      * @dev Burn tokens to reduce total supply
      * @param _amount Number of tokens to burn
      */
-    function burn(uint256 _amount) public returns (uint256) {
+    function burn(uint256 _amount) internal returns (uint256) {
         uint256 burnAmount = (_amount * BURN_PERCENTAGE) / (PERCENTAGE_FACTOR);
+        uint256 reserveAmount = (_amount * RESERVE_PERCENTAGE) /
+            (PERCENTAGE_FACTOR);
         unchecked {
-            totalSupply_ -= burnAmount;
+            totalSupply_ = totalSupply_ - (burnAmount);
+            balances[contractAddress] += reserveAmount;
         }
-        return burnAmount;
+        return burnAmount + reserveAmount;
     }
 
     /**
@@ -274,13 +311,16 @@ contract MelodyCoin {
         );
     }
 
-    function pauseContract() external onlyOwner {
-        paused = true;
-        emit Paused(block.timestamp);
+    function togglePause() external onlyOwner {
+        paused = !paused;
+        if (paused) {
+            emit Paused(block.timestamp);
+        } else {
+            emit UnPaused(block.timestamp);
+        }
     }
 
-    function unPauseContract() external onlyOwner {
-        paused = false;
-        emit UnPaused(block.timestamp);
+    receive() external payable {
+        revert("Contract does not accept ETH");
     }
 }
