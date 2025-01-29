@@ -28,6 +28,8 @@ contract MelodyCoin{
     event Mint(uint256 amount);
 
     error TooHighBalance(address account);
+    error TooFrequentRequests(address account);
+    error DepletedFaucetReserves();
 
     modifier onlyOwner(){
         require(msg.sender == owner_,"Only owner can perform this action!");
@@ -52,12 +54,16 @@ contract MelodyCoin{
     }
 
     modifier faucetDayIntervalCheck(address _account){
-        require(block.timestamp >= faucetRecords[_account]+FAUCET_VALIDATION_INTERVAL);
+        if(block.timestamp < faucetRecords[_account]+FAUCET_VALIDATION_INTERVAL){
+            revert TooFrequentRequests(_account);
+        }
         _;
     }
 
     modifier faucetBalanceCheck(){
-        require(balances[contractAddress] > FAUCET_ONE_TIME_DELIVERY_AMOUNT,"Reserves depleted!");
+        if(balances[contractAddress] <= FAUCET_ONE_TIME_DELIVERY_AMOUNT){
+            revert DepletedFaucetReserves();
+        }
         _;
     }
     /**

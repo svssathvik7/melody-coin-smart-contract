@@ -55,15 +55,45 @@ contract MelodyCoinTest is Test {
 
     function test_ExcessBalanceForFaucet() public{
         vm.startPrank(bob);
-        for(int i=0;i<16;i++){
-            uint256 balance = coin.balanceOf(bob);
+        for (uint256 i = 0; i < 15; i++) {
             vm.warp(block.timestamp + 1 days);
-            console.log("User current balance:", balance);
-            if(i==15){
-                vm.expectRevert(MelodyCoin.TooHighBalance.selector);
-            }
             coin.getFaucetAssets();
         }
+        vm.expectRevert(abi.encodeWithSignature("TooHighBalance(address)", bob));
+        vm.warp(block.timestamp + 1 days);
+        coin.getFaucetAssets();
+        vm.stopPrank();
+    }
+
+    function test_FrequentFaucetAbuse() public{
+        vm.startPrank(bob);
+        vm.expectRevert(abi.encodeWithSignature("TooFrequentRequests(address)", bob));
+        coin.getFaucetAssets();
+        vm.stopPrank();
+    }
+
+    function test_FaucetReserveAlert() public{
+        address[10] memory users;
+        for(uint8 i=0;i<10;i++){
+            users[i] = address(uint160(i+3));
+        }
+        for(uint8 userIndex=0;userIndex<9;userIndex++){
+            address user = users[userIndex];
+            vm.startPrank(user);
+            for(uint8 transactionIndex=0;transactionIndex<10;transactionIndex++){
+                vm.warp(block.timestamp + 1 days);
+                coin.getFaucetAssets();
+            }
+            vm.stopPrank();
+        }
+        vm.startPrank(users[9]);
+        for(uint8 transactionIndex=0;transactionIndex<9;transactionIndex++){
+            vm.warp(block.timestamp + 1 days);
+            coin.getFaucetAssets();
+        }
+        vm.expectRevert(abi.encodeWithSignature("DepletedFaucetReserves()"));
+        vm.warp(block.timestamp + 1 days);
+        coin.getFaucetAssets();
         vm.stopPrank();
     }
 }
