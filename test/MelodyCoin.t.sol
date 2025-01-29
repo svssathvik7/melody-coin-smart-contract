@@ -22,6 +22,15 @@ contract MelodyCoinTest is Test {
         coin = new MelodyCoin(_name,_symbol,_decimals,_initialSupply,_maxCap);
     }
 
+    function helper_RequestFaucetAssets(address user,uint8 times) internal{
+        vm.startPrank(user);
+        for (uint8 i = 0; i < times; i++) {
+            vm.warp(block.timestamp + 1 days);
+            coin.getFaucetAssets();
+        }
+        vm.stopPrank();
+    }
+
     function test_ContractOwner() public view{
         address deployer = coin.owner_();
         assertEq(deployer,sathvik,"Error deployer storage!");
@@ -45,31 +54,21 @@ contract MelodyCoinTest is Test {
     }
 
     function test_GetAssetFromFaucet() public{
-        vm.startPrank(sathvik);
-        vm.warp(block.timestamp + 1 days);
-        coin.getFaucetAssets();
-        vm.stopPrank();
+        helper_RequestFaucetAssets(sathvik, 1);
         uint256 balance = coin.balanceOf(sathvik);
         assertEq(balance,1e17,"Error fetching assets from faucet");
     }
 
     function test_ExcessBalanceForFaucet() public{
-        vm.startPrank(bob);
-        for (uint256 i = 0; i < 15; i++) {
-            vm.warp(block.timestamp + 1 days);
-            coin.getFaucetAssets();
-        }
+        helper_RequestFaucetAssets(bob, 15);
         vm.expectRevert(abi.encodeWithSignature("TooHighBalance(address)", bob));
-        vm.warp(block.timestamp + 1 days);
-        coin.getFaucetAssets();
-        vm.stopPrank();
+        helper_RequestFaucetAssets(bob, 1);
     }
 
     function test_FrequentFaucetAbuse() public{
-        vm.startPrank(bob);
         vm.expectRevert(abi.encodeWithSignature("TooFrequentRequests(address)", bob));
+        vm.prank(bob);
         coin.getFaucetAssets();
-        vm.stopPrank();
     }
 
     function test_FaucetReserveAlert() public{
@@ -78,19 +77,10 @@ contract MelodyCoinTest is Test {
             users[i] = address(uint160(i+3));
         }
         for(uint8 userIndex=0;userIndex<9;userIndex++){
-            address user = users[userIndex];
-            vm.startPrank(user);
-            for(uint8 transactionIndex=0;transactionIndex<10;transactionIndex++){
-                vm.warp(block.timestamp + 1 days);
-                coin.getFaucetAssets();
-            }
-            vm.stopPrank();
+            helper_RequestFaucetAssets(users[userIndex], 10);
         }
+        helper_RequestFaucetAssets(users[9], 9);
         vm.startPrank(users[9]);
-        for(uint8 transactionIndex=0;transactionIndex<9;transactionIndex++){
-            vm.warp(block.timestamp + 1 days);
-            coin.getFaucetAssets();
-        }
         vm.expectRevert(abi.encodeWithSignature("DepletedFaucetReserves()"));
         vm.warp(block.timestamp + 1 days);
         coin.getFaucetAssets();
