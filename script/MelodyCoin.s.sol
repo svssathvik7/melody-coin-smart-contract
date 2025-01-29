@@ -16,13 +16,7 @@ contract MelodyCoinScript is Script {
     function run() public returns (MelodyCoin) {
         uint256 privateKey = vm.envUint("DEV_PRIVATE_KEY");
         vm.startBroadcast(privateKey);
-        MelodyCoin melodyCoin = new MelodyCoin(
-            NAME,
-            SYMBOL,
-            DECIMALS,
-            INIT_SUPPLY,
-            MAX_CAP
-        );
+        MelodyCoin melodyCoin = new MelodyCoin(NAME, SYMBOL, DECIMALS, INIT_SUPPLY, MAX_CAP);
         vm.stopBroadcast();
         console.log("Contract deployed at : ", address(melodyCoin));
         console.log("Contract name : ", melodyCoin.name());
