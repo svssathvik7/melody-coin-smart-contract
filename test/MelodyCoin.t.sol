@@ -268,6 +268,19 @@ contract MelodyCoinTest is Test {
         coin.approve(bob, 1e20); // more allowance than balance is accepted
     }
 
+    function test_CheckFrontRunRaceCondition() public {
+        vm.startPrank(sathvik);
+        coin.approve(bob, 1e18);
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "FrontRunApprovalCheck(string)",
+                "Set allowance to zero first, to avoid frontrun race"
+            )
+        );
+        coin.approve(bob, 1e17);
+        vm.stopPrank();
+    }
+
     // tests for pause and unpause contract
     function test_PauseContract() public {
         vm.prank(sathvik);

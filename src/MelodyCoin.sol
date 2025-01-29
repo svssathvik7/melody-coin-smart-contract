@@ -41,6 +41,7 @@ contract MelodyCoin {
     error ContractPaused();
     error MaxCapExceeded();
     error InsufficientAllowance();
+    error FrontRunApprovalCheck(string msg);
 
     modifier onlyOwner() {
         if (msg.sender != owner_) {
@@ -104,6 +105,18 @@ contract MelodyCoin {
     modifier hasSufficientAllowance(address sender, uint256 amount) {
         if (allowances[sender][msg.sender] < amount) {
             revert InsufficientAllowance();
+        }
+        _;
+    }
+
+    modifier checkApprovalRace(address spender, uint256 amount) {
+        // msg.sender, spender
+        if (amount != 0) {
+            if (allowances[msg.sender][spender] != 0) {
+                revert FrontRunApprovalCheck(
+                    "Set allowance to zero first, to avoid frontrun race"
+                );
+            }
         }
         _;
     }
@@ -209,7 +222,13 @@ contract MelodyCoin {
     function approve(
         address _spender,
         uint256 _amount
-    ) external noZeroAddrTransfer(_spender) isContractPaused returns (bool) {
+    )
+        external
+        noZeroAddrTransfer(_spender)
+        isContractPaused
+        checkApprovalRace(_spender, _amount)
+        returns (bool)
+    {
         allowances[msg.sender][_spender] = _amount;
         emit Approval(msg.sender, _spender, _amount);
         return true;
