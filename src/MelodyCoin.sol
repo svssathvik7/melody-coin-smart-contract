@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
-contract MelodyCoin{
+
+contract MelodyCoin {
     uint8 public constant RESERVE_PERCENTAGE = 2;
     uint8 public constant BURN_PERCENTAGE = 2; // reserve gets 0.2%
     bool public paused;
@@ -16,69 +17,81 @@ contract MelodyCoin{
     uint256 public totalSupply_;
     uint256 public maxCap_;
 
+    mapping(address => uint256) private balances;
+    mapping(address => mapping(address => uint256)) private allowances;
+    mapping(address => uint256) private faucetRecords;
 
-
-    mapping(address=>uint256) private balances;
-    mapping(address=>mapping(address=>uint256)) private allowances;
-    mapping(address=>uint256) private faucetRecords;
-
-    event Transfer(address indexed from,address indexed to,uint256 amount);
-    event Approval(address indexed owner,address indexed spender,uint256 amount);
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 amount
+    );
     event Burn(address indexed from, address indexed to, uint256 amount);
     event Mint(uint256 amount);
+    event Paused(uint256 timestamp);
+    event UnPaused(uint256 timestamp);
 
     error TooHighBalance(address account);
     error TooFrequentRequests(address account);
     error DepletedFaucetReserves();
+    error ContractPaused();
 
-    modifier onlyOwner(){
-        require(msg.sender == owner_,"Only owner can perform this action!");
+    modifier onlyOwner() {
+        require(msg.sender == owner_, "Only owner can perform this action!");
         _;
     }
 
-    modifier noZeroAddrTransfer(address _receipent){
-        require(_receipent != address(0),"Can't transfer to zero address");
+    modifier noZeroAddrTransfer(address _receipent) {
+        require(_receipent != address(0), "Can't transfer to zero address");
         _;
     }
 
-    modifier hasSufficientFunds(uint256 _balance, uint256 _amount){
-        require(_balance >= _amount,"No sufficient funds!");
+    modifier hasSufficientFunds(uint256 _balance, uint256 _amount) {
+        require(_balance >= _amount, "No sufficient funds!");
         _;
     }
 
-    modifier faucetMaxBalanceCheck(address _account){
-        if(balances[_account] >= FAUCET_USER_THRESHOLD_BALANCE){
+    modifier faucetMaxBalanceCheck(address _account) {
+        if (balances[_account] >= FAUCET_USER_THRESHOLD_BALANCE) {
             revert TooHighBalance(_account);
         }
         _;
     }
 
-    modifier faucetDayIntervalCheck(address _account){
-        if(block.timestamp < faucetRecords[_account]+FAUCET_VALIDATION_INTERVAL){
+    modifier faucetDayIntervalCheck(address _account) {
+        if (
+            block.timestamp <
+            faucetRecords[_account] + FAUCET_VALIDATION_INTERVAL
+        ) {
             revert TooFrequentRequests(_account);
         }
         _;
     }
 
-    modifier faucetBalanceCheck(){
-        if(balances[contractAddress] <= FAUCET_ONE_TIME_DELIVERY_AMOUNT){
+    modifier faucetBalanceCheck() {
+        if (balances[contractAddress] <= FAUCET_ONE_TIME_DELIVERY_AMOUNT) {
             revert DepletedFaucetReserves();
         }
         _;
     }
+
     /**
         @dev constructor to initialize the token
         @param _name is the token name
         @param _symbol is the token symbol
     */
-    constructor (
+    constructor(
         string memory _name,
         string memory _symbol,
         uint8 _decimals,
         uint256 _initialSupply,
         uint256 _maxCap
     ) {
-        require(_initialSupply <= _maxCap,"Initial supply can't exceed Max Cap");
+        require(
+            _initialSupply <= _maxCap,
+            "Initial supply can't exceed Max Cap"
+        );
         owner_ = msg.sender;
         paused = false;
         name_ = _name;
@@ -95,92 +108,109 @@ contract MelodyCoin{
     /**
         @dev Returns the name of the token
     */
-    function name() public view returns (string memory){
+    function name() public view returns (string memory) {
         return name_;
     }
 
     /**
         @dev Returns the symbol of the token
     */
-    function symbol() public view returns (string memory){
+    function symbol() public view returns (string memory) {
         return symbol_;
     }
 
     /**
         @dev Returns the number of the decimals
     */
-    function decimals() public view returns (uint8){
+    function decimals() public view returns (uint8) {
         return decimals_;
     }
 
     /**
         @dev Returns the total supply of the tokens
     */
-    function totalSupply() public view returns (uint256){
+    function totalSupply() public view returns (uint256) {
         return totalSupply_;
     }
 
     /**
-        * @dev Check token balance of a specific address
-        * @param _account Address to check balance for
-        * @return Token balance of the account
-    */
+     * @dev Check token balance of a specific address
+     * @param _account Address to check balance for
+     * @return Token balance of the account
+     */
     function balanceOf(address _account) public view returns (uint256) {
         return balances[_account];
     }
 
     /**
-        * @dev Transfers tokens from sender to recipient
-        * @param _recipient Address receiving the tokens
-        * @param _amount Number of tokens to transfer
-        * @return Boolean indicating transfer success
-    */
-    function transfer(address _recipient, uint256 _amount) public noZeroAddrTransfer(_recipient) hasSufficientFunds(balances[msg.sender], _amount) returns (bool) {
+     * @dev Transfers tokens from sender to recipient
+     * @param _recipient Address receiving the tokens
+     * @param _amount Number of tokens to transfer
+     * @return Boolean indicating transfer success
+     */
+    function transfer(
+        address _recipient,
+        uint256 _amount
+    )
+        public
+        noZeroAddrTransfer(_recipient)
+        hasSufficientFunds(balances[msg.sender], _amount)
+        returns (bool)
+    {
         uint256 burnAmount = burn(_amount);
-        unchecked{
+        unchecked {
             balances[msg.sender] -= _amount;
             balances[_recipient] += (_amount - burnAmount);
         }
-        emit Transfer(msg.sender, _recipient, _amount-burnAmount);
+        emit Transfer(msg.sender, _recipient, _amount - burnAmount);
         emit Burn(msg.sender, _recipient, burnAmount);
         return true;
     }
 
     /**
-        * @dev Approves another address to spend tokens on behalf of the owner
-        * @param _spender Address allowed to spend tokens
-        * @param _amount Number of tokens allowed to spend
-        * @return Boolean indicating approval success
-    */
-    function approve(address _spender, uint256 _amount) public noZeroAddrTransfer(_spender) returns (bool) {
+     * @dev Approves another address to spend tokens on behalf of the owner
+     * @param _spender Address allowed to spend tokens
+     * @param _amount Number of tokens allowed to spend
+     * @return Boolean indicating approval success
+     */
+    function approve(
+        address _spender,
+        uint256 _amount
+    ) public noZeroAddrTransfer(_spender) returns (bool) {
         allowances[msg.sender][_spender] = _amount;
         emit Approval(msg.sender, _spender, _amount);
         return true;
     }
 
     /**
-        * @dev Returns the number of tokens a spender is allowed to spend on behalf of an owner
-        * @param _owner Address of token owner
-        * @param _spender Address allowed to spend tokens
-        * @return Remaining number of tokens spender is allowed to spend
-    */
-    function allowance(address _owner, address _spender) public view returns (uint256) {
+     * @dev Returns the number of tokens a spender is allowed to spend on behalf of an owner
+     * @param _owner Address of token owner
+     * @param _spender Address allowed to spend tokens
+     * @return Remaining number of tokens spender is allowed to spend
+     */
+    function allowance(
+        address _owner,
+        address _spender
+    ) public view returns (uint256) {
         return allowances[_owner][_spender];
     }
 
     /**
-        * @dev Transfers tokens from one address to another if allowed
-        * @param _sender Address sending the tokens
-        * @param _recipient Address receiving the tokens
-        * @param _amount Number of tokens to transfer
-        * @return Boolean indicating transfer success
-    */
+     * @dev Transfers tokens from one address to another if allowed
+     * @param _sender Address sending the tokens
+     * @param _recipient Address receiving the tokens
+     * @param _amount Number of tokens to transfer
+     * @return Boolean indicating transfer success
+     */
     function transferFrom(
-        address _sender, 
-        address _recipient, 
+        address _sender,
+        address _recipient,
         uint256 _amount
     ) public hasSufficientFunds(balances[_sender], _amount) returns (bool) {
-        require(allowances[_sender][msg.sender] >= _amount, "No sufficient allowance!");
+        require(
+            allowances[_sender][msg.sender] >= _amount,
+            "No sufficient allowance!"
+        );
         balances[_sender] -= _amount;
         uint256 burnAmount = burn(_amount);
         balances[_recipient] += (_amount - burnAmount);
@@ -191,38 +221,66 @@ contract MelodyCoin{
     }
 
     /**
-        * @dev Mint new tokens (needs owner accesss)
-        * @param _account Address to receive new tokens
-        * @param _amount Number of tokens to mint
-    */
-    function mint(address _account, uint256 _amount) public onlyOwner(){
-        require((totalSupply_+_amount) < maxCap_,"Can't mint tokens, as it exceeds the set Max Cap");
-        uint256 reserveShare = (_amount * RESERVE_PERCENTAGE)/10; // 20%
+     * @dev Mint new tokens (needs owner accesss)
+     * @param _account Address to receive new tokens
+     * @param _amount Number of tokens to mint
+     */
+    function mint(address _account, uint256 _amount) public onlyOwner {
+        require(
+            (totalSupply_ + _amount) < maxCap_,
+            "Can't mint tokens, as it exceeds the set Max Cap"
+        );
+        uint256 reserveShare = (_amount * RESERVE_PERCENTAGE) / 10; // 20%
         uint256 userShare = _amount - reserveShare;
-        unchecked{totalSupply_ += _amount;
-        balances[_account] += userShare;
-        balances[contractAddress] += reserveShare;}
+        unchecked {
+            totalSupply_ += _amount;
+            balances[_account] += userShare;
+            balances[contractAddress] += reserveShare;
+        }
         emit Transfer(address(0), _account, userShare);
         emit Mint(_amount);
     }
 
     /**
-        * @dev Burn tokens to reduce total supply
-        * @param _amount Number of tokens to burn
-    */
+     * @dev Burn tokens to reduce total supply
+     * @param _amount Number of tokens to burn
+     */
     function burn(uint256 _amount) public returns (uint256) {
-        uint256 burnAmount = (_amount * BURN_PERCENTAGE)/(PERCENTAGE_FACTOR);
-        unchecked{totalSupply_ -= burnAmount;}
+        uint256 burnAmount = (_amount * BURN_PERCENTAGE) / (PERCENTAGE_FACTOR);
+        unchecked {
+            totalSupply_ -= burnAmount;
+        }
         return burnAmount;
     }
 
     /**
-        * @dev Faucet for new users to collect tokens
-    */
-   function getFaucetAssets() faucetDayIntervalCheck(msg.sender) faucetMaxBalanceCheck(msg.sender) faucetBalanceCheck() external{
-        unchecked{balances[contractAddress] -= FAUCET_ONE_TIME_DELIVERY_AMOUNT;
-        balances[msg.sender] += FAUCET_ONE_TIME_DELIVERY_AMOUNT;}
+     * @dev Faucet for new users to collect tokens
+     */
+    function getFaucetAssets()
+        external
+        faucetDayIntervalCheck(msg.sender)
+        faucetMaxBalanceCheck(msg.sender)
+        faucetBalanceCheck
+    {
+        unchecked {
+            balances[contractAddress] -= FAUCET_ONE_TIME_DELIVERY_AMOUNT;
+            balances[msg.sender] += FAUCET_ONE_TIME_DELIVERY_AMOUNT;
+        }
         faucetRecords[msg.sender] = block.timestamp;
-        emit Transfer(address(this), msg.sender, FAUCET_ONE_TIME_DELIVERY_AMOUNT);
-   }
+        emit Transfer(
+            address(this),
+            msg.sender,
+            FAUCET_ONE_TIME_DELIVERY_AMOUNT
+        );
+    }
+
+    function pauseContract() external onlyOwner {
+        paused = true;
+        emit Paused(block.timestamp);
+    }
+
+    function unPauseContract() external onlyOwner {
+        paused = false;
+        emit UnPaused(block.timestamp);
+    }
 }
