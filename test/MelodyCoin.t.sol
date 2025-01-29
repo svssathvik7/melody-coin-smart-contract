@@ -296,4 +296,12 @@ contract MelodyCoinTest is Test {
         bool isPaused = coin.paused();
         assertEq(isPaused, false, "Error unpausing contract");
     }
+
+    // test accidental ETH send
+    function test_RevertOnEth() public {
+        vm.deal(sathvik, 10 ether);
+        address contractAddress = coin.contractAddress();
+        vm.expectRevert("Contract does not accept ETH");
+        payable(contractAddress).transfer(1 ether);
+    }
 }
