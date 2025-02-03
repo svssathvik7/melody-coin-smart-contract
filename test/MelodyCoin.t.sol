@@ -20,7 +20,13 @@ contract MelodyCoinTest is Test {
         sathvik = address(1);
         bob = address(2);
         vm.prank(sathvik);
-        coin = new MelodyCoin(_name, _symbol, _decimals, _initialSupply, _maxCap);
+        coin = new MelodyCoin(
+            _name,
+            _symbol,
+            _decimals,
+            _initialSupply,
+            _maxCap
+        );
     }
 
     function helper_RequestFaucetAssets(address user, uint8 times) internal {
@@ -64,12 +70,16 @@ contract MelodyCoinTest is Test {
 
     function test_ExcessBalanceForFaucet() public {
         helper_RequestFaucetAssets(bob, 15);
-        vm.expectRevert(abi.encodeWithSignature("TooHighBalance(address)", bob));
+        vm.expectRevert(
+            abi.encodeWithSignature("TooHighBalance(address)", bob)
+        );
         helper_RequestFaucetAssets(bob, 1);
     }
 
     function test_FrequentFaucetAbuse() public {
-        vm.expectRevert(abi.encodeWithSignature("TooFrequentRequests(address)", bob));
+        vm.expectRevert(
+            abi.encodeWithSignature("TooFrequentRequests(address)", bob)
+        );
         vm.prank(bob);
         coin.getFaucetAssets();
     }
@@ -93,9 +103,17 @@ contract MelodyCoinTest is Test {
         helper_RequestFaucetAssets(sathvik, 10);
         vm.startPrank(sathvik);
         coin.transfer(bob, 1e18);
-        assertLt(coin.balanceOf(sathvik), 1e18, "Error reducing balance of the sender");
+        assertLt(
+            coin.balanceOf(sathvik),
+            1e18,
+            "Error reducing balance of the sender"
+        );
         assertLt(coin.balanceOf(bob), 1e18, "Error burning down tokens");
-        assertGt(coin.balanceOf(contractAddress), 0, "Error cutting reserve share in transfer");
+        assertGt(
+            coin.balanceOf(contractAddress),
+            0,
+            "Error cutting reserve share in transfer"
+        );
     }
 
     function test_InvalidTransferAddress() public {
@@ -115,7 +133,13 @@ contract MelodyCoinTest is Test {
     }
 
     function test_InsufficientFundsTransferFailure() public {
-        vm.expectRevert(abi.encodeWithSignature("InsufficientFunds(uint256,uint256)", 0, 1e18));
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "InsufficientFunds(uint256,uint256)",
+                0,
+                1e18
+            )
+        );
         vm.startPrank(sathvik);
         coin.transfer(bob, 1e18);
         vm.stopPrank();
@@ -157,14 +181,22 @@ contract MelodyCoinTest is Test {
     function test_MintUserShareCheck() public {
         vm.startPrank(sathvik);
         coin.mint(sathvik, 1e20);
-        assertLt(coin.balanceOf(coin.contractAddress()), 1e20, "Error calculating user share while minting");
+        assertLt(
+            coin.balanceOf(coin.contractAddress()),
+            1e20,
+            "Error calculating user share while minting"
+        );
         vm.stopPrank();
     }
 
     function test_UpdateTotalSupplyOnMint() public {
         vm.startPrank(sathvik);
         coin.mint(sathvik, 1e20);
-        assertEq(coin.totalSupply(), 11e19, "Error updating total supply while mint");
+        assertEq(
+            coin.totalSupply(),
+            11e19,
+            "Error updating total supply while mint"
+        );
         vm.stopPrank();
     }
 
@@ -197,7 +229,11 @@ contract MelodyCoinTest is Test {
         uint256 senderBalance = coin.balanceOf(sathvik);
         assertGt(recvBalance, 0, "Error tranferring tokens in transferFrom");
         assertLt(recvBalance, 1e15, "Error burning tokens in transferFrom");
-        assertLt(senderBalance, 2e17, "Error cutting tokens from sender in transferFrom");
+        assertLt(
+            senderBalance,
+            2e17,
+            "Error cutting tokens from sender in transferFrom"
+        );
     }
 
     function test_TransferFromNoBalanceCheck() public {
@@ -206,7 +242,13 @@ contract MelodyCoinTest is Test {
         vm.prank(sathvik);
         coin.approve(bob, 1e20);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSignature("InsufficientFunds(uint256,uint256)", 1e17, 1e20));
+        vm.expectRevert(
+            abi.encodeWithSignature(
+                "InsufficientFunds(uint256,uint256)",
+                1e17,
+                1e20
+            )
+        );
         coin.transferFrom(sathvik, alice, 1e20);
     }
 
@@ -231,7 +273,8 @@ contract MelodyCoinTest is Test {
         coin.approve(bob, 1e18);
         vm.expectRevert(
             abi.encodeWithSignature(
-                "FrontRunApprovalCheck(string)", "Set allowance to zero first, to avoid frontrun race"
+                "FrontRunApprovalCheck(string)",
+                "Set allowance to zero first, to avoid frontrun race"
             )
         );
         coin.approve(bob, 1e17);
@@ -260,5 +303,19 @@ contract MelodyCoinTest is Test {
         address contractAddress = coin.contractAddress();
         vm.expectRevert("Contract does not accept ETH");
         payable(contractAddress).transfer(1 ether);
+    }
+
+    // Fuzz tests
+    function fuzz_DeployContract(
+        string memory name,
+        string memory symbol,
+        uint8 decimals,
+        uint256 initSupply,
+        uint256 maxCap
+    ) public {
+        vm.assume(initSupply < maxCap);
+        vm.startPrank(sathvik);
+        new MelodyCoin(name, symbol, decimals, initSupply, maxCap);
+        vm.stopPrank();
     }
 }
