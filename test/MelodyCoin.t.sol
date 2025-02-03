@@ -306,7 +306,7 @@ contract MelodyCoinTest is Test {
     }
 
     // Fuzz tests
-    function fuzz_DeployContract(
+    function test_FuzzyDeployContract(
         string memory name,
         string memory symbol,
         uint8 decimals,
@@ -317,5 +317,37 @@ contract MelodyCoinTest is Test {
         vm.startPrank(sathvik);
         new MelodyCoin(name, symbol, decimals, initSupply, maxCap);
         vm.stopPrank();
+    }
+
+    function test_FuzzyTokenDetails(
+        string memory name,
+        string memory symbol,
+        uint8 decimals,
+        uint256 initialSupply,
+        uint256 maxCap
+    ) public {
+        vm.assume(initialSupply <= maxCap);
+        vm.assume(bytes(name).length > 0 && bytes(name).length <= 32);
+        vm.assume(bytes(symbol).length > 0 && bytes(symbol).length <= 8);
+
+        vm.startPrank(sathvik);
+        MelodyCoin newCoin = new MelodyCoin(
+            name,
+            symbol,
+            decimals,
+            initialSupply,
+            maxCap
+        );
+        vm.stopPrank();
+
+        assertEq(newCoin.name(), name, "Name not set correctly");
+        assertEq(newCoin.symbol(), symbol, "Symbol not set correctly");
+        assertEq(newCoin.decimals(), decimals, "Decimals not set correctly");
+        assertEq(newCoin.maxCap_(), maxCap, "Max cap not set correctly");
+        assertEq(
+            newCoin.totalSupply(),
+            initialSupply,
+            "Initial supply not set correctly"
+        );
     }
 }
