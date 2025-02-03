@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.10;
+pragma solidity ^0.8.19;
 
 contract MelodyCoin {
     /**
@@ -11,17 +11,17 @@ contract MelodyCoin {
      */
     uint8 public constant BURN_PERCENTAGE = 2;
     bool public paused;
-    uint8 public decimals_;
+    uint8 public immutable decimals_;
     uint16 public constant PERCENTAGE_FACTOR = 1000;
     address public immutable owner_;
-    address public contractAddress;
+    address public immutable contractAddress;
     string public name_;
     string public symbol_;
     uint256 public constant FAUCET_ONE_TIME_DELIVERY_AMOUNT = 1e17; // 0.1 in wei
     uint256 public constant FAUCET_USER_THRESHOLD_BALANCE = 15e17;
     uint256 public constant FAUCET_VALIDATION_INTERVAL = 24 hours;
     uint256 public totalSupply_;
-    uint256 public maxCap_;
+    uint256 public immutable maxCap_;
 
     mapping(address => uint256) private balances;
     mapping(address => mapping(address => uint256)) private allowances;
@@ -179,12 +179,14 @@ contract MelodyCoin {
      * @dev Transfers tokens from sender to recipient
      * @param _recipient Address receiving the tokens
      * @param _amount Number of tokens to transfer
+     * @return Boolean indicating transfer success
      */
     function transfer(address _recipient, uint256 _amount)
         external
         noZeroAddrTransfer(_recipient)
         isContractPaused
         hasSufficientFunds(balances[msg.sender], _amount)
+        returns (bool)
     {
         uint256 burnAmount = burn(_amount);
         unchecked {
@@ -193,21 +195,25 @@ contract MelodyCoin {
         }
         emit Transfer(msg.sender, _recipient, _amount - burnAmount);
         emit Burn(msg.sender, _recipient, burnAmount);
+        return true;
     }
 
     /**
      * @dev Approves another address to spend tokens on behalf of the owner
      * @param _spender Address allowed to spend tokens
      * @param _amount Number of tokens allowed to spend
+     * @return Boolean indicating approval success
      */
     function approve(address _spender, uint256 _amount)
         external
         noZeroAddrTransfer(_spender)
         isContractPaused
         checkApprovalRace(_spender, _amount)
+        returns (bool)
     {
         allowances[msg.sender][_spender] = _amount;
         emit Approval(msg.sender, _spender, _amount);
+        return true;
     }
 
     /**
@@ -225,12 +231,14 @@ contract MelodyCoin {
      * @param _sender Address sending the tokens
      * @param _recipient Address receiving the tokens
      * @param _amount Number of tokens to transfer
+     * @return Boolean indicating transfer success
      */
     function transferFrom(address _sender, address _recipient, uint256 _amount)
         external
         hasSufficientFunds(balances[_sender], _amount)
         isContractPaused
         hasSufficientAllowance(_sender, _amount)
+        returns (bool)
     {
         balances[_sender] -= _amount;
         uint256 burnAmount = burn(_amount);
@@ -238,6 +246,7 @@ contract MelodyCoin {
         allowances[_sender][msg.sender] -= _amount;
         emit Transfer(_sender, _recipient, _amount - burnAmount);
         emit Burn(msg.sender, _recipient, burnAmount);
+        return true;
     }
 
     /**
