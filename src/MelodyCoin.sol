@@ -28,11 +28,7 @@ contract MelodyCoin {
     mapping(address => uint256) private faucetRecords;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 amount
-    );
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
     event Burn(address indexed from, address indexed to, uint256 amount);
     event Mint(uint256 amount);
     event Paused(uint256 timestamp);
@@ -85,10 +81,7 @@ contract MelodyCoin {
     }
 
     modifier faucetDayIntervalCheck(address _account) {
-        if (
-            block.timestamp <
-            faucetRecords[_account] + FAUCET_VALIDATION_INTERVAL
-        ) {
+        if (block.timestamp < faucetRecords[_account] + FAUCET_VALIDATION_INTERVAL) {
             revert TooFrequentRequests(_account);
         }
         _;
@@ -119,9 +112,7 @@ contract MelodyCoin {
         // msg.sender, spender
         if (amount != 0) {
             if (allowances[msg.sender][spender] != 0) {
-                revert FrontRunApprovalCheck(
-                    "Set allowance to zero first, to avoid frontrun race"
-                );
+                revert FrontRunApprovalCheck("Set allowance to zero first, to avoid frontrun race");
             }
         }
         _;
@@ -132,17 +123,8 @@ contract MelodyCoin {
      *     @param _name is the token name
      *     @param _symbol is the token symbol
      */
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        uint8 _decimals,
-        uint256 _initialSupply,
-        uint256 _maxCap
-    ) {
-        require(
-            _initialSupply <= _maxCap,
-            "Initial supply can't exceed max cap"
-        );
+    constructor(string memory _name, string memory _symbol, uint8 _decimals, uint256 _initialSupply, uint256 _maxCap) {
+        require(_initialSupply <= _maxCap, "Initial supply can't exceed max cap");
         owner_ = msg.sender;
         paused = false;
         name_ = _name;
@@ -198,10 +180,7 @@ contract MelodyCoin {
      * @param _recipient Address receiving the tokens
      * @param _amount Number of tokens to transfer
      */
-    function transfer(
-        address _recipient,
-        uint256 _amount
-    )
+    function transfer(address _recipient, uint256 _amount)
         external
         noZeroAddrTransfer(_recipient)
         isContractPaused
@@ -221,10 +200,7 @@ contract MelodyCoin {
      * @param _spender Address allowed to spend tokens
      * @param _amount Number of tokens allowed to spend
      */
-    function approve(
-        address _spender,
-        uint256 _amount
-    )
+    function approve(address _spender, uint256 _amount)
         external
         noZeroAddrTransfer(_spender)
         isContractPaused
@@ -240,10 +216,7 @@ contract MelodyCoin {
      * @param _spender Address allowed to spend tokens
      * @return Remaining number of tokens spender is allowed to spend
      */
-    function allowance(
-        address _owner,
-        address _spender
-    ) external view returns (uint256) {
+    function allowance(address _owner, address _spender) external view returns (uint256) {
         return allowances[_owner][_spender];
     }
 
@@ -253,11 +226,7 @@ contract MelodyCoin {
      * @param _recipient Address receiving the tokens
      * @param _amount Number of tokens to transfer
      */
-    function transferFrom(
-        address _sender,
-        address _recipient,
-        uint256 _amount
-    )
+    function transferFrom(address _sender, address _recipient, uint256 _amount)
         external
         hasSufficientFunds(balances[_sender], _amount)
         isContractPaused
@@ -276,10 +245,7 @@ contract MelodyCoin {
      * @param _account Address to receive new tokens
      * @param _amount Number of tokens to mint
      */
-    function mint(
-        address _account,
-        uint256 _amount
-    ) external onlyOwner isContractPaused maxCapCheck(_amount) {
+    function mint(address _account, uint256 _amount) external onlyOwner isContractPaused maxCapCheck(_amount) {
         uint256 reserveShare = (_amount * RESERVE_PERCENTAGE) / 10; // 20%
         uint256 userShare = _amount - reserveShare;
         unchecked {
@@ -297,8 +263,7 @@ contract MelodyCoin {
      */
     function burn(uint256 _amount) internal returns (uint256) {
         uint256 burnAmount = (_amount * BURN_PERCENTAGE) / (PERCENTAGE_FACTOR);
-        uint256 reserveAmount = (_amount * RESERVE_PERCENTAGE) /
-            (PERCENTAGE_FACTOR);
+        uint256 reserveAmount = (_amount * RESERVE_PERCENTAGE) / (PERCENTAGE_FACTOR);
         unchecked {
             totalSupply_ = totalSupply_ - (burnAmount);
             balances[contractAddress] += reserveAmount;
@@ -320,11 +285,7 @@ contract MelodyCoin {
             balances[msg.sender] += FAUCET_ONE_TIME_DELIVERY_AMOUNT;
         }
         faucetRecords[msg.sender] = block.timestamp;
-        emit Transfer(
-            address(this),
-            msg.sender,
-            FAUCET_ONE_TIME_DELIVERY_AMOUNT
-        );
+        emit Transfer(address(this), msg.sender, FAUCET_ONE_TIME_DELIVERY_AMOUNT);
     }
 
     function togglePause() external onlyOwner {
