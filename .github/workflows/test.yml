@@ -9,35 +9,78 @@ env:
   FOUNDRY_PROFILE: ci
 
 jobs:
-  check:
-    strategy:
-      fail-fast: true
-
-    name: Foundry project
+  setup:
+    name: Setup Environment
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+      - name: Install lcov
+        run: sudo apt-get install lcov
 
-      - name: Show Forge version
-        run: |
-          forge --version
-
+  format:
+    needs: setup
+    name: Format Code
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge fmt
-        run: |
-          forge fmt --check
-        id: fmt
+        run: forge fmt
+      - name: Commit formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: format code with forge fmt"
+          branch: ${{ github.head_ref }}
 
+  build:
+    needs: format
+    name: Build Project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge build
-        run: |
-          forge build --sizes
-        id: build
+        run: forge build --sizes
 
+  test:
+    needs: build
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
       - name: Run Forge tests
+        run: forge test -vvv
+
+  coverage:
+    needs: test
+    name: Generate Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Install lcov
+        run: sudo apt-get install lcov
+      - name: Run Coverage
         run: |
-          forge test -vvv
-        id: test
+          forge coverage --report lcov
+          lcov --remove lcov.info -o lcov.info 'test/*' 'script/*'
+          genhtml lcov.info -o coverage
